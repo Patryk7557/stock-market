@@ -110,7 +110,7 @@ app.post("/chaos", (req, res) => {
 });
 
 app.get("/",(req, res) => {
-    res.send("API działa");
+    res.send("API works");
 });
 
 app.listen(port, () => {
