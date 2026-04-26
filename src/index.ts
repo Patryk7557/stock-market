@@ -2,7 +2,7 @@ import express from "express";
 
 const app = express();
 app.use(express.json());
-const port = process.argv[2] || 3000;
+const port = Number(process.argv[2]) || 3000;
 const bank = new Map<string, number>();
 const wallets = new Map<string, Map<string, number>>();
 const log: {type: string; wallet_id: string; stock_name: string}[] = [];
@@ -52,8 +52,13 @@ app.get("/wallets/:walletId", (req, res) => {
 
 app.get("/wallets/:walletId/stocks/:stock", (req, res) => {
     const {walletId, stock} = req.params;
+
+    if (!bank.has(stock)) {
+        return res.sendStatus(404);
+    }
+
     const wallet = wallets.get(walletId);
-    const quantity = wallet?.get(stock) || 0;
+    const quantity = wallet?.get(stock) ?? 0;
 
     res.send(quantity.toString());
 });
@@ -121,10 +126,6 @@ app.get("/log", (req, res) => {
 app.post("/chaos", (req, res) => {
     res.on("finish", () => process.exit(1));
     res.send("Killing instance...");
-});
-
-app.get("/",(req, res) => {
-    res.send("API works");
 });
 
 if (require.main === module) {
