@@ -12,7 +12,6 @@ describe("Stock Market API", () => {
     });
 
     it("should return 400 when bank has no stock", async () => {
-        // ustaw pusty bank
         await request(app)
             .post("/stocks")
             .send({ stocks: [{ name: "apple", quantity: 0 }] });

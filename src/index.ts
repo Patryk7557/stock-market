@@ -1,4 +1,5 @@
 import express from "express";
+import { Request, Response, NextFunction } from "express";
 
 const app = express();
 app.use(express.json());
@@ -126,6 +127,11 @@ app.get("/log", (req, res) => {
 app.post("/chaos", (req, res) => {
     res.on("finish", () => process.exit(1));
     res.send("Killing instance...");
+});
+
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+    console.error(err);
+    res.sendStatus(500);
 });
 
 if (require.main === module) {
