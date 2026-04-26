@@ -134,3 +134,10 @@ If one instance is terminated, others remain available.
 * Data is stored in memory (no persistence)
 * Instances do not share state
 * Designed for simplicity and clarity
+
+---
+
+## Compatibility
+
+The application can be run on both x64 and ARM64 architectures.
+Docker uses a multi-architecture Node.js image (`node:20`), so it works across different environments without additional configuration.
