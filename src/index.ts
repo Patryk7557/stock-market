@@ -15,6 +15,19 @@ app.get("/stocks", (req, res) =>{
 });
 
 app.post("/stocks", (req, res) => {
+    if (!req.body || !Array.isArray(req.body.stocks)) {
+        return res.sendStatus(400);
+    }
+    for (const s of req.body.stocks) {
+        if (
+            typeof s.name !== "string" ||
+            typeof s.quantity !== "number" ||
+            s.quantity < 0
+        ) {
+            return res.sendStatus(400);
+        }
+    }
+
     bank.clear();
 
     for(const s of req.body.stocks){
@@ -46,9 +59,15 @@ app.get("/wallets/:walletId/stocks/:stock", (req, res) => {
 });
 
 app.post("/wallets/:walletId/stocks/:stock", (req, res) => {
-    const {walletId, stock} = req.params;
-    const {type} = req.body;
+    const { walletId, stock } = req.params;
+    const { type } = req.body;
 
+    if (!req.body || typeof type !== "string") {
+        return res.sendStatus(400);
+    }
+    if (type !== "buy" && type !== "sell") {
+        return res.sendStatus(400);
+    }
     if (!bank.has(stock)) {
         return res.sendStatus(404);
     }
@@ -59,7 +78,7 @@ app.post("/wallets/:walletId/stocks/:stock", (req, res) => {
         wallets.set(walletId, wallet);
     }
 
-    if(type === "buy") {
+    if (type === "buy") {
         const bankQty = bank.get(stock)!;
 
         if (bankQty <= 0) {
@@ -67,7 +86,7 @@ app.post("/wallets/:walletId/stocks/:stock", (req, res) => {
         }
 
         bank.set(stock, bankQty - 1);
-        wallet.set(stock, (wallet.get(stock) || 0) + 1);
+        wallet.set(stock, (wallet.get(stock) ?? 0) + 1);
 
         log.push({
             type: "buy",
@@ -78,25 +97,20 @@ app.post("/wallets/:walletId/stocks/:stock", (req, res) => {
         return res.sendStatus(200);
     }
 
-    if(type === "sell") {
-        const walletQty = wallet.get(stock) || 0;
-
-        if(walletQty <= 0) {
+    if (type === "sell") {
+        const walletQty = wallet.get(stock) ?? 0;
+        if (walletQty <= 0) {
             return res.sendStatus(400);
         }
-
         wallet.set(stock, walletQty - 1);
-        bank.set (stock, (bank.get(stock) || 0) + 1);
-
+        bank.set(stock, (bank.get(stock) ?? 0) + 1);
         log.push({
             type: "sell",
             wallet_id: walletId,
             stock_name: stock
         });
-
         return res.sendStatus(200);
     }
-
     return res.sendStatus(400);
 });
 
