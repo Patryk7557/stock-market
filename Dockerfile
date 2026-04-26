@@ -7,4 +7,7 @@ RUN npm install
 
 COPY . .
 
-CMD ["npx", "ts-node", "src/index.ts", "3000"]
+EXPOSE 3000
+
+ENTRYPOINT ["npx", "ts-node", "src/index.ts"]
+CMD ["3000"]

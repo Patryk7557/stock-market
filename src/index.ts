@@ -105,8 +105,8 @@ app.get("/log", (req, res) => {
 });
 
 app.post("/chaos", (req, res) => {
+    res.on("finish", () => process.exit(1));
     res.send("Killing instance...");
-    process.exit(1);
 });
 
 app.get("/",(req, res) => {

@@ -49,7 +49,11 @@ docker run -p 3001:3000 stock-market-app 3000
 docker run -p 3002:3000 stock-market-app 3000
 ```
 
-Each instance runs independently. Killing one instance does not affect others.
+Each instance runs independently.
+Killing one instance does not affect others.
+
+**Note:** Each instance maintains its own in-memory state.
+High availability is demonstrated at the process level (no shared persistence).
 
 ---
 
@@ -57,7 +61,7 @@ Each instance runs independently. Killing one instance does not affect others.
 
 ### Bank
 
-* `GET /stocks` – get bank state
+* `GET /stocks` – get current bank state
 * `POST /stocks` – set bank state
 
 ### Example: initialize bank
@@ -98,28 +102,35 @@ or
 { "type": "sell" }
 ```
 
+Returns:
+
+* `200` – success
+* `400` – invalid operation (e.g. insufficient stock)
+* `404` – stock does not exist
+
 ---
 
 ### Audit Log
 
-* `GET /log` – get all successful operations
+* `GET /log` – returns all successful wallet operations
 
 ---
 
 ### Chaos
 
-* `POST /chaos` – kills current instance
+* `POST /chaos` – terminates current instance
 
 ---
 
 ## High Availability
 
-Application can be run in multiple instances (e.g. Docker containers).
-Killing one instance does not affect others.
+High availability is simulated by running multiple independent instances.
+If one instance is terminated, others remain available.
 
 ---
 
 ## Notes
 
 * Data is stored in memory (no persistence)
+* Instances do not share state
 * Designed for simplicity and clarity
