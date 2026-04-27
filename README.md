@@ -9,11 +9,19 @@ Simple REST API that simulates a stock market.
 * Fixed stock price (1)
 * Audit log of all successful operations
 * Chaos endpoint to simulate instance failure
-* Supports running multiple instances (high availability simulation)
+* Supports running multiple instances with shared state (Redis)
 
 ---
 
 ## Run locally
+
+### 1. Start Redis
+
+```bash
+docker run -d -p 6379:6379 redis
+```
+
+### 2. Run app
 
 ```bash
 npm install
@@ -32,12 +40,24 @@ npx ts-node src/index.ts 8080
 
 ## Run with Docker
 
+### 1. Start Redis
+
+```bash
+docker run -d -p 6379:6379 redis
+```
+
+### 2. Build and run app
+
 ```bash
 docker build -t stock-market-app .
 docker run -p 3000:3000 stock-market-app 3000
 ```
 
-The port is passed as an argument to the application.
+The application connects to Redis at:
+
+```
+redis://host.docker.internal:6379
+```
 
 ---
 
@@ -49,11 +69,9 @@ docker run -p 3001:3000 stock-market-app 3000
 docker run -p 3002:3000 stock-market-app 3000
 ```
 
-Each instance runs independently.
-Killing one instance does not affect others.
+All instances share the same Redis datastore.
 
-**Note:** Each instance maintains its own in-memory state.
-High availability is demonstrated at the process level (no shared persistence).
+Killing one instance does not affect others, and data remains consistent across all instances.
 
 ---
 
@@ -82,7 +100,7 @@ POST /stocks
 ### Wallets
 
 * `GET /wallets/{wallet_id}` – get wallet state
-* `GET /wallets/{wallet_id}/stocks/{stock_name}` – get stock quantity
+* `GET /wallets/{wallet_id}/stocks/{stock_name}` – get stock quantity (returns plain number)
 
 ---
 
@@ -112,7 +130,7 @@ Returns:
 
 ### Audit Log
 
-* `GET /log` – returns all successful wallet operations
+* `GET /log` – returns all successful wallet operations (shared across instances)
 
 ---
 
@@ -124,16 +142,23 @@ Returns:
 
 ## High Availability
 
-High availability is simulated by running multiple independent instances.
-If one instance is terminated, others remain available.
+The system uses Redis as a shared datastore, allowing multiple instances to operate on the same data.
+
+If one instance is terminated, other instances continue working without data loss.
 
 ---
 
 ## Notes
 
-* Data is stored in memory (no persistence)
-* Instances do not share state
+* Data is stored in Redis (in-memory datastore)
+* All instances share the same state
 * Designed for simplicity and clarity
+* To reset the system state, remove and recreate the Redis container:
+
+```bash
+docker rm -f <redis_container_id>
+docker run -d -p 6379:6379 redis
+```
 
 ---
 

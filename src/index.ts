@@ -1,21 +1,40 @@
 import express from "express";
 import { Request, Response, NextFunction } from "express";
+import { createClient } from "redis";
+
+const redis = createClient({
+    url: "redis://host.docker.internal:6379"
+});
+
+(async () => {
+    try {
+        await redis.connect();
+        console.log("Connected to Redis");
+    } catch (err) {
+        console.error("Redis connection error", err);
+    }
+})();
 
 const app = express();
 app.use(express.json());
 const port = Number(process.argv[2]) || 3000;
-const bank = new Map<string, number>();
-const wallets = new Map<string, Map<string, number>>();
-const log: {type: string; wallet_id: string; stock_name: string}[] = [];
 
-app.get("/stocks", (req, res) =>{
-    const stocks = Array.from(bank.entries()).map(
-        ([name, quantity]) => ({name, quantity})
+app.get("/stocks", async (req, res) => {
+    const keys = await redis.keys("bank:*");
+    const stocks = await Promise.all(
+        keys.map(async (key) => {
+            const name = key.split(":")[1];
+            const qty = await redis.get(key);
+            return {
+                name,
+                quantity: Number(qty)
+            };
+        })
     );
-    res.json({stocks});
+    return res.json({ stocks });
 });
 
-app.post("/stocks", (req, res) => {
+app.post("/stocks",  async (req, res) => {
     if (!req.body || !Array.isArray(req.body.stocks)) {
         return res.sendStatus(400);
     }
@@ -29,42 +48,50 @@ app.post("/stocks", (req, res) => {
         }
     }
 
-    bank.clear();
-
-    for(const s of req.body.stocks){
-        bank.set(s.name, s.quantity);
+    const keys = await redis.keys("bank:*");
+    if (keys.length > 0) {
+        await redis.del(keys);
+    }
+    for (const s of req.body.stocks) {
+        await redis.set(`bank:${s.name}`, s.quantity.toString());
     }
     res.sendStatus(200);
 })
 
-app.get("/wallets/:walletId", (req, res) => {
+app.get("/wallets/:walletId", async (req, res) => {
     const walletId = req.params.walletId;
-    const wallet = wallets.get(walletId);
+    const keys = await redis.keys(`wallet:${walletId}:*`);
 
-    if (!wallet) {
-        return res.json({id: walletId, stocks: [] });
+    if (keys.length === 0) {
+        return res.json({ id: walletId, stocks: [] });
     }
-
-    const stocks = Array.from(wallet.entries()).map(
-        ([name, quantity]) => ({name, quantity})
+    const stocks = await Promise.all(
+        keys.map(async (key) => {
+            const stock = key.split(":")[2];
+            const qty = await redis.get(key);
+            return {
+                name: stock,
+                quantity: Number(qty)
+            };
+        })
     );
-    res.json ({ id: walletId, stocks});
+    return res.json({ id: walletId, stocks });
 });
 
-app.get("/wallets/:walletId/stocks/:stock", (req, res) => {
-    const {walletId, stock} = req.params;
+app.get("/wallets/:walletId/stocks/:stock", async (req, res) => {
+    const { walletId, stock } = req.params;
+    const exists = await redis.exists(`bank:${stock}`);
 
-    if (!bank.has(stock)) {
+    if (!exists) {
         return res.sendStatus(404);
     }
+    const qtyStr = await redis.get(`wallet:${walletId}:${stock}`);
+    const quantity = Number(qtyStr ?? 0);
 
-    const wallet = wallets.get(walletId);
-    const quantity = wallet?.get(stock) ?? 0;
-
-    res.send(quantity.toString());
+    return res.send(quantity.toString());
 });
 
-app.post("/wallets/:walletId/stocks/:stock", (req, res) => {
+app.post("/wallets/:walletId/stocks/:stock", async (req, res) => {
     const { walletId, stock } = req.params;
     const { type } = req.body;
 
@@ -74,54 +101,57 @@ app.post("/wallets/:walletId/stocks/:stock", (req, res) => {
     if (type !== "buy" && type !== "sell") {
         return res.sendStatus(400);
     }
-    if (!bank.has(stock)) {
+    const exists = await redis.exists(`bank:${stock}`);
+    if (!exists) {
         return res.sendStatus(404);
     }
-
-    let wallet = wallets.get(walletId);
-    if (!wallet) {
-        wallet = new Map();
-        wallets.set(walletId, wallet);
-    }
+    const bankQtyStr = await redis.get(`bank:${stock}`);
+    const bankQty = Number(bankQtyStr ?? 0);
 
     if (type === "buy") {
-        const bankQty = bank.get(stock)!;
-
         if (bankQty <= 0) {
             return res.sendStatus(400);
         }
-
-        bank.set(stock, bankQty - 1);
-        wallet.set(stock, (wallet.get(stock) ?? 0) + 1);
-
-        log.push({
+        const walletQtyStr = await redis.get(`wallet:${walletId}:${stock}`);
+        const walletQty = Number(walletQtyStr ?? 0);
+        await redis.set(`bank:${stock}`, (bankQty - 1).toString());
+        await redis.set(
+            `wallet:${walletId}:${stock}`,
+            (walletQty + 1).toString()
+        );
+        await redis.rPush("log", JSON.stringify({
             type: "buy",
             wallet_id: walletId,
             stock_name: stock
-        });
-
+        }));
         return res.sendStatus(200);
     }
 
     if (type === "sell") {
-        const walletQty = wallet.get(stock) ?? 0;
+        const walletQtyStr = await redis.get(`wallet:${walletId}:${stock}`);
+        const walletQty = Number(walletQtyStr ?? 0);
         if (walletQty <= 0) {
             return res.sendStatus(400);
         }
-        wallet.set(stock, walletQty - 1);
-        bank.set(stock, (bank.get(stock) ?? 0) + 1);
-        log.push({
+        await redis.set(
+            `wallet:${walletId}:${stock}`,
+            (walletQty - 1).toString()
+        );
+        await redis.set(`bank:${stock}`, (bankQty + 1).toString());
+        await redis.rPush("log", JSON.stringify({
             type: "sell",
             wallet_id: walletId,
             stock_name: stock
-        });
+        }));
         return res.sendStatus(200);
     }
     return res.sendStatus(400);
 });
 
-app.get("/log", (req, res) => {
-    res.json({log});
+app.get("/log", async (req, res) => {
+    const entries = await redis.lRange("log", 0, -1);
+    const log = entries.map(e => JSON.parse(e));
+    return res.json({ log });
 });
 
 app.post("/chaos", (req, res) => {
