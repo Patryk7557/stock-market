@@ -158,6 +158,7 @@ If one instance is terminated, other instances continue working without data los
 * Cache is automatically invalidated on state-changing operations (buy, sell, or updating stocks)
 * Logging is handled asynchronously using a Redis-backed queue
 * A background worker processes log entries to avoid blocking requests
+* Atomic Redis operations (INCR/DECR) are used to prevent race conditions during concurrent buy/sell requests
 * Designed for simplicity and clarity
 * To reset the system state, remove and recreate the Redis container:
 

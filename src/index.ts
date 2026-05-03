@@ -93,14 +93,12 @@ app.get("/wallets/:walletId/stocks/:stock", async (req, res) => {
     }
     const qtyStr = await redis.get(`wallet:${walletId}:${stock}`);
     const quantity = Number(qtyStr ?? 0);
-
     return res.send(quantity.toString());
 });
 
 app.post("/wallets/:walletId/stocks/:stock", async (req, res) => {
     const { walletId, stock } = req.params;
     const { type } = req.body;
-
     if (!req.body || typeof type !== "string") {
         return res.sendStatus(400);
     }
@@ -111,21 +109,20 @@ app.post("/wallets/:walletId/stocks/:stock", async (req, res) => {
     if (!exists) {
         return res.sendStatus(404);
     }
-    const bankQtyStr = await redis.get(`bank:${stock}`);
-    const bankQty = Number(bankQtyStr ?? 0);
 
     if (type === "buy") {
-        if (bankQty <= 0) {
+        const newBankQty = await redis.decr(`bank:${stock}`);
+        if (newBankQty < 0) {
+            await redis.incr(`bank:${stock}`);
             return res.sendStatus(400);
         }
         const walletQtyStr = await redis.get(`wallet:${walletId}:${stock}`);
         const walletQty = Number(walletQtyStr ?? 0);
-        await redis.set(`bank:${stock}`, (bankQty - 1).toString());
-        await redis.del("cache:stocks");
         await redis.set(
             `wallet:${walletId}:${stock}`,
             (walletQty + 1).toString()
         );
+        await redis.del("cache:stocks");
         await redis.lPush("log_queue", JSON.stringify({
             type: "buy",
             wallet_id: walletId,
@@ -135,16 +132,12 @@ app.post("/wallets/:walletId/stocks/:stock", async (req, res) => {
     }
 
     if (type === "sell") {
-        const walletQtyStr = await redis.get(`wallet:${walletId}:${stock}`);
-        const walletQty = Number(walletQtyStr ?? 0);
-        if (walletQty <= 0) {
+        const newWalletQty = await redis.decr(`wallet:${walletId}:${stock}`);
+        if (newWalletQty < 0) {
+            await redis.incr(`wallet:${walletId}:${stock}`);
             return res.sendStatus(400);
         }
-        await redis.set(
-            `wallet:${walletId}:${stock}`,
-            (walletQty - 1).toString()
-        );
-        await redis.set(`bank:${stock}`, (bankQty + 1).toString());
+        await redis.incr(`bank:${stock}`);
         await redis.del("cache:stocks");
         await redis.lPush("log_queue", JSON.stringify({
             type: "sell",
@@ -175,7 +168,6 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 setInterval(async () => {
     try {
         const result = await redis.rPop("log_queue");
-
         if (result) {
             await redis.rPush("log", result);
         }
