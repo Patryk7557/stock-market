@@ -20,6 +20,10 @@ app.use(express.json());
 const port = Number(process.argv[2]) || 3000;
 
 app.get("/stocks", async (req, res) => {
+    const cached = await redis.get("cache:stocks");
+    if (cached) {
+        return res.json({ stocks: JSON.parse(cached) });
+    }
     const keys = await redis.keys("bank:*");
     const stocks = await Promise.all(
         keys.map(async (key) => {
@@ -31,6 +35,7 @@ app.get("/stocks", async (req, res) => {
             };
         })
     );
+    await redis.set("cache:stocks", JSON.stringify(stocks));
     return res.json({ stocks });
 });
 
@@ -55,7 +60,8 @@ app.post("/stocks",  async (req, res) => {
     for (const s of req.body.stocks) {
         await redis.set(`bank:${s.name}`, s.quantity.toString());
     }
-    res.sendStatus(200);
+    await redis.del("cache:stocks");
+    return res.sendStatus(200);
 })
 
 app.get("/wallets/:walletId", async (req, res) => {
@@ -115,6 +121,7 @@ app.post("/wallets/:walletId/stocks/:stock", async (req, res) => {
         const walletQtyStr = await redis.get(`wallet:${walletId}:${stock}`);
         const walletQty = Number(walletQtyStr ?? 0);
         await redis.set(`bank:${stock}`, (bankQty - 1).toString());
+        await redis.del("cache:stocks");
         await redis.set(
             `wallet:${walletId}:${stock}`,
             (walletQty + 1).toString()
@@ -138,6 +145,7 @@ app.post("/wallets/:walletId/stocks/:stock", async (req, res) => {
             (walletQty - 1).toString()
         );
         await redis.set(`bank:${stock}`, (bankQty + 1).toString());
+        await redis.del("cache:stocks");
         await redis.rPush("log", JSON.stringify({
             type: "sell",
             wallet_id: walletId,

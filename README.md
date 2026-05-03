@@ -10,6 +10,7 @@ Simple REST API that simulates a stock market.
 * Audit log of all successful operations
 * Chaos endpoint to simulate instance failure
 * Supports running multiple instances with shared state (Redis)
+* Basic caching for improved performance of frequently accessed endpoints
 
 ---
 
@@ -152,6 +153,8 @@ If one instance is terminated, other instances continue working without data los
 
 * Data is stored in Redis (in-memory datastore)
 * All instances share the same state
+* Basic caching is implemented for the `GET /stocks` endpoint to reduce load on Redis and improve response time
+* Cache is automatically invalidated on state-changing operations (buy, sell, or updating stocks)
 * Designed for simplicity and clarity
 * To reset the system state, remove and recreate the Redis container:
 
