@@ -126,7 +126,7 @@ app.post("/wallets/:walletId/stocks/:stock", async (req, res) => {
             `wallet:${walletId}:${stock}`,
             (walletQty + 1).toString()
         );
-        await redis.rPush("log", JSON.stringify({
+        await redis.lPush("log_queue", JSON.stringify({
             type: "buy",
             wallet_id: walletId,
             stock_name: stock
@@ -146,7 +146,7 @@ app.post("/wallets/:walletId/stocks/:stock", async (req, res) => {
         );
         await redis.set(`bank:${stock}`, (bankQty + 1).toString());
         await redis.del("cache:stocks");
-        await redis.rPush("log", JSON.stringify({
+        await redis.lPush("log_queue", JSON.stringify({
             type: "sell",
             wallet_id: walletId,
             stock_name: stock
@@ -171,6 +171,18 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     console.error(err);
     res.sendStatus(500);
 });
+
+setInterval(async () => {
+    try {
+        const result = await redis.rPop("log_queue");
+
+        if (result) {
+            await redis.rPush("log", result);
+        }
+    } catch (err) {
+        console.error("Queue worker error", err);
+    }
+}, 100);
 
 if (require.main === module) {
     app.listen(port, () => {
